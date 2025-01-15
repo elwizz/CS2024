@@ -1,0 +1,445 @@
+#########################################################################
+#Computer Systems 2024 (Oulu University), Assembly exercise 
+#studentName = Eelis Turjanmaa
+#Fibonacci number asserter v.1.3
+#Program can process 56 bit numbers, optimized for max 20 bit numbers
+#by setting value of %r12 in pbCheckifend and %r13 in findSquareRoot.
+
+#Procedure name: main
+#Arguments: %r11, mem. address for Fibonacci number array 
+#Return values: %rax, 0 if all elements are Fib. num., else first non Fib-num.
+#Procedure desc: Main function of the Fibonacci number asserter program.  
+#  Sets up stack. Calls isFibonacci subprocedure accessing each element
+#  of the array given as argument, and asserting whether the element is
+#  a Fibonacci number.
+#Register usage table:
+#  %rax: int foundNonFibonacci
+#  %rbp: int stackBasePointer (saved in stack)
+#  %rsp: int stackTopPointer (saved in stack)
+#  %r14: int increment (pushed)
+#  %r13: int incrArrMemAdress (pushed)
+#  %r12: int comparisonZero
+#  %rdi: int array[i] (passed as argument to isFibonacci)
+#Instruction count: minimum 9(zero number list), 19 for a single number list
+#  and + 10 for each additional number. 
+
+main:                                                                   
+    irmovq stack, %rsp      # stackTopPointer = stack; 
+    irmovq stack, %rbp      # stackBasePointer = stack;
+    
+                                                                        
+    irmovq 8, %r14          # i = 0; //increment, 1 byte
+    irmovq array, %r13      # incrArrMemAdress = array
+                                                                        
+    assertFibLoop:          # while(array[i] != 0){               
+    mrmovq (%r13), %rdi     #   if (array[i] == 0){
+    irmovq $0, %r12         #       return foundNonFibonacci;                                   
+    subq %rdi, %r12         #   } else {           
+    je end                  #
+    pushq %r14              #
+    pushq %r13              #       isFibonacci(array[i]);                              
+    call isFibonacci        #
+    popq %r13               #
+    popq %r14               #       i = i + 1;                                                  
+    addq %r14, %r13         #                                           
+    jmp assertFibLoop       #                                           
+    end:                    #                                           
+    halt                    #   
+#########################################################################
+
+#Procedure name: isFibonacci
+#Arguments: %rdi, Fibonacci number candidate
+#Return values: %rax, 0 if number candidate is fib., else the number itself
+#Procedure desc: The procedure uses the procedures pbMultiply and
+#  findSquareRoot to find, whether the number multiplied by itself and 5
+#  +- 4 is a perfect square, and consequently, a Fibonacci number.
+#  The + 4 option is inspected first. If this checks out, zero is returned. If not,
+#  The procedure moves on to the -4 option. If this checks out zero is returned.
+#  If not, the number itself is returned.
+#Register usage table:
+#  %rbx: Variable for the result of the pbMultiply function
+#  %rcx: Variable for the result of the findSquareRoot function
+#  %rdi: The Fibonacci number candidate (received as argument, pushed)
+#  %rsi: Copy of the FNC. Argument for pbMultiply and findSquareRoot
+#  %rdx: Copy of the FNC. Argument for pbMultiply.
+#  %r12: Comparison zero.
+#  %r13: Temp. storage for calculation value.
+#  %r14: +4 and -4 options for perfect square calculation (pushed)
+#Instruction count: 36 instructions for a number asserted with the + 4 option,
+#  71 instructions for a number asserted with the -4 option and 73 instructions
+#  if number is not a Fibonacci number.
+#
+isFibonacci:
+    irmovq $4, %r14         # int d = 4;
+    isFibSecOpt:            # int i;  
+    rrmovq %rdi, %rsi       # 
+    rrmovq %rdi, %rdx       # for(i = 0; i < 2; i++){
+                            # int x = array[i];
+    pushq %r14              # int y = array[i];
+    call pbMultiply         # int a = x * y;
+    popq %r14               #
+    rrmovq %rbx, %rdx       #
+    irmovq $5, %rsi         # y = 5;
+    pushq %r14              #
+    call pbMultiply         # a = a * y;
+    popq %r14               #
+    addq %r14, %rbx         # a = a + d;
+    rrmovq %rbx, %r13       # int c = a;
+    rrmovq %rbx, %rsi       #
+    pushq %rdi              #
+    pushq %r13              #
+    pushq %rsi              #
+    pushq %r14              #
+    call findSquareRoot     # a = sqrt(a);
+    popq %r14               #
+    popq %rsi               #
+    popq %r13               #
+    popq %rdi               #
+    rrmovq %rcx, %rsi       # x = a;
+    rrmovq %rcx, %rdx       # y = a;
+    pushq %rdi              #
+    pushq %r13              #
+    pushq %r14              #
+    call pbMultiply         # b = x * y
+    popq %r14               #
+    popq %r13               #
+    popq %rdi               #
+    subq %rbx, %r13         # if((c - b) == 0){ 68
+    cmove %r13, %rax        #   return 0;
+    je assertFib            # } else {
+                            #
+    addq %r14, %r14         # d = - 4;
+    cmovl %rdi, %rax        # if (i == 1){   
+    jl noFibs               #   return array[i]
+    irmovq $-4, %r14        # }
+    jmp isFibSecOpt         #
+                            #
+                            #
+    assertFib:              #
+    ret                     #
+    noFibs:                 #//In case the number was not a Fib. number...
+    popq %rsi               #//...remove last call from stack, and...
+    halt                    #//...halt
+#########################################################################    
+    
+#Procedure name: findSquareRoot
+#Arguments: %rsi, integer to be squared
+#Return values: %rcx the squared value.
+#Procedure desc: The procedure squares an integer number using the
+#  procedures rangeBit and divideTheRest. See the procedure
+#  descriptions for these.
+#Register usage table:
+#  %rsi: number to be rooted, passed as argument to rangeBit and divideTheRest
+#  %rcx: Variable for the result of the findSquareRoot function
+#  %r13: "bit", initial bit position given as argument to rangeBit.
+#    Setting the bit to lower values makes the routine faster for smaller
+#    numbers. Works for up to 56 bit numbers when set at 0x100000000000000.
+#    Restriction caused by rshiftonebit procedure, see this for details.
+#  %r12: comparison zero for setting flags
+#  %r11: incrementation value for loops
+#Instruction count: 7 in all cases.
+
+findSquareRoot:
+    irmovq $0, %rcx         # int rootedNumber;
+    irmovq $0x1000000, %r13 # int bit = 0x1000000; //Set for 24 bit numbers
+                            #
+    irmovq $0, %r12         # bit = rangeBit(number, bit);
+    irmovq $1, %r11         #
+                            #
+    call rangeBit           # rootedNumber = divideTheRest(number, bit);
+    call divideTheRest      #
+    ret                     # return rootedNumber;
+######################################################################### 
+    
+#Procedure name: rangeBit
+#Arguments: %rsi, integer to be squared, %r13 initial "bit" position.
+#Return values: %r13, the ranged bit value.
+#Procedure desc: The procedure moves the value for "bit" where the
+# 2 x to the right on each step as long as "bit" is more than the rooted
+# number. Bitshifting is done with rshiftonebit procedure, see this for
+# details. Returns shifted "bit" value.
+#Register usage table:
+#  %rsi: number to be rooted
+#  %r13: "bit"
+#  %rdi: copy of "bit" passed as argument for rshiftonebit procedure 
+#  %r10: copy of "bit" for checking loop condition
+#Instruction count: Dependant on the initial value of "bit" and the number to
+#  be rooted. The higher the initial value of the bit and the lower the number,
+#  the more shifts have to be done. In the ideal case only one shift is done,
+#  resulting in 12 instructions. The worst case scenario with "bit" starting
+#  at 0x1000000 (for max 24 bit numbers) and the number being 1 will result
+#  in 13 shifts. Each shift means 7 additional instructions, so the worst case
+#  will result in 12 + 12 * 7 = 96 instructions. With 32 bit numbers it would
+#  12 + 16 * 7 = 124 and with the maximum number size this program can process
+#  (56 bit numbers) 12 + 28 * 7 = 208.
+
+rangeBit:
+    bitRangingLoop:
+    rrmovq %r13, %r10       # while(bit > number){
+    subq %rsi, %r10         #   bit >> 2;
+    jle bitRanged           # }
+    rrmovq %r13, %rdi       # 
+    call rshiftonebit       # 
+    call rshiftonebit       #
+    rrmovq %rdi, %r13       #
+    jmp bitRangingLoop      #
+    bitRanged:              #
+    ret                     #
+######################################################################### 
+    
+#Procedure name: divideTheRest
+#Arguments: %rsi, number to be rooted, %r13, "bit".
+#Return values: %rcx, the rooted value of the number
+#Procedure desc: The procedure loops until "bit" == 0. During each
+#  loop, "bit" is shifted 2 x to the right (divided by 4). Depending
+# on the effect of the division bitshift on the truth value of
+# number >= currentRootResult + "bit" the result is modified. When
+# the inequality is true, a) the result is divided by two
+# and the value "bit" is added to it or b) the result is divided by two.
+#Register usage table:
+#  %rcx: root result
+#  %rsi: number to be rooted
+#  %rdi: copy of "bit" or result passed as argument for rshiftonebit
+#  %r13: "bit"
+#  %r12: zero for condition checks 
+#  %r10: copy of number to be rooted for condition checks.
+#Instruction count: "Bit" will be shifted until it reaches zero value, so the
+#  the larger the number, the more loops in the function. In the minimum case
+#  "bit" is 0b1 or 0b10/0b11, which will result in a single loop. In this case
+#  the instruction count will be 21. In the worst case (for 24 bit numbers), the
+#  loop will run 12 times. Each additional run adds 16 or 17 instructions. So the
+#  worst case means ~200 instructions. Assessing the cost together with the rangeBit
+#  procedure (without subprocedures), number 1 would take 96 + 21 = 117 instructions,
+#  while number 1000 would cost 12 + 200 = 212 instructions. Taking into account the
+#  cost of the rshiftonebit procedure, which is fixed at 11, divideTheRest calls
+#  the procedure 3 x each loop, while rangeBit calls it 2 x per each loop.
+#  Due to this, 13 x 22 = 286 + 1 * 33 = 33 are added to 117 for number == 1 resulting in 
+#  436 instructions. For number 1000 the total cost would be 212 + 1 * 22 + 12 * 33 = 630
+#  instructions. 
+    
+divideTheRest:
+    squareRootOuterLoop:    # while (bit != 0 {
+    irmovq $0, %r12         #   if(number >= result + bit){
+    subq %r13, %r12         #       number = number - (result + bit);
+    je squareRootDone       #       result = (result >> 1) + bit;
+                            #   } else {
+    rrmovq %rsi, %r10       #       result = result >> 1;;      
+    subq %rcx, %r10         #   }
+    subq %r13, %r10         #   bit = bit >> 2;
+    jl sqrtInnerLoopElse    #
+    subq %rcx, %rsi         #
+    subq %r13, %rsi         #
+    rrmovq %rcx, %rdi       #
+    call rshiftonebit       #
+    rrmovq %rdi, %rcx       #
+    addq %r13, %rcx         #
+    jmp sqrtInnerLoopBoth   #
+    sqrtInnerLoopElse:      #
+    rrmovq %rcx, %rdi       #
+    call rshiftonebit       #
+    rrmovq %rdi, %rcx       #
+    sqrtInnerLoopBoth:      #
+    rrmovq %r13, %rdi       #
+    call rshiftonebit       #
+    call rshiftonebit       #
+    rrmovq %rdi, %r13       #
+                            #
+    jmp squareRootOuterLoop #.
+    squareRootDone:         #
+    ret                     #
+######################################################################### 
+#Procedure name: rhisftonebit
+#Arguments: %rdi, number to be bitshifted.
+#Return values: %rdi, the bitshifted number.
+#Procedure desc: The given value is first shifted to the left 7 x times
+#  by adding the number to itself. The number is then placed in memory
+#  and fetched with + 1 byte offset. The result is a value bitshifted
+#  once to the right.
+#Register usage table:
+#  %rdi: number to be shifted, and the result.
+#  %r14  register for the memory address.
+#Instruction count: 11 instructions in all cases.
+
+rshiftonebit:
+    addq %rdi, %rdi         # int number;
+    addq %rdi, %rdi         # number = number >> 1;
+    addq %rdi, %rdi         #
+    addq %rdi, %rdi         #
+    addq %rdi, %rdi         #
+    addq %rdi, %rdi         #
+    addq %rdi, %rdi         #
+    irmovq rsmemplace, %r14 #
+    rmmovq %rdi, (%r14)     #
+    mrmovq 1(%r14), %rdi    #
+    ret                     #
+
+#########################################################################
+
+#Procedure name: pbMultiply
+#Arguments: %rsi, %rdx Numbers to be multiplied
+#Return values: %rbx, result of the multiplication
+#Procedure desc: The procedure uses the peasant binary method to multiply
+#two numbers in loops. For each loop uses procedure pbSetup to setup necessary
+#variables. Then calls pbBitshiftsum to an addition. 
+#Register usage table:
+#  %rbx: Variable for the result of the function
+#  %rsi: multiplication operand 1
+#  %rdx: multiplication operand 2
+#  %r14: intermediate multiplication result
+#  %r13: bitmask value
+#  %r11: increment
+#  %r10: Initial value for loop count
+#  %r8: Copy of loop count
+#Instruction count: The initial part of the function has 8 instructions.
+#  The recurring part has 6 instructions. For any given number, the recurring
+#  part will be repeated 12 times (set for max. Fibonacci candidate == 1000
+#  in pbCheckifend procedure) giving 8 + 12 x 6 = 80 instructions. The complete
+#  cost of the procedure is dependent on the size and the binary representation
+#  of the number. A larger number is not necessarily more costly, because the
+#  pbBitshiftsum procedure is only called, if a bit corresponding to the mask is
+#  non-zero. So 512 = 0b1000000000 is less costly than 3 = 0b11. With the given
+#  max. Fibonacci, pbBitshiftsum is called 6 times and only once for value 1.
+#  This results in 126 instructions from pbBitshiftsum for num == 1000 and 5
+#  corresponding instructions for num == 1. Each pbSetup costs 8 instructions,
+#  so in any case altogether 104 instructions from this.  Checkifend costs 3
+#  instructions, so 39 instructions in any case from this. In conclusion, num == 1
+#  will cost 228 instructions and num == 1000, 349 instructions.
+
+
+pbMultiply:
+    #Setup function variables
+    irmovq $0, %rbx     # int result = 0;
+    irmovq $0, %r14     # int intermediateResult = 0;
+                        #
+    irmovq $1, %r13     # int bitMask = 1;
+    irmovq $1, %r11     # //Result and loop incrementation value
+    irmovq $-1, %r10    # int i;
+                        #
+                        #
+                        # //Special case for first value
+    call pbSetup        # if (pbSetup (int number, int bitMask, int loopCount == 1){
+    je pbFirsthop       #   intermediateResult = intermediateResult + 1;
+    addq %rdx, %rbx     # //If value with mask 0x1 is zero, skip this round,
+    pbFirsthop:         # //else add 1 to intermediateResult
+    call pbCheckifend   # for(i = - 1; i < 13, i++){ 
+                        #   if (pbSetup (int number, int bitMask, int loopCount == 1){
+    jg pbLoop           #       pbBitshiftsum();
+                        #   }
+    ret                 #
+                        # //After first time, loop
+    pbLoop:             #
+    addq %r13, %r13     # bitMask = bitMask + bitMask; // 1 x bitshift to the left.
+    call pbSetup        #
+    je pbBitshifthop    # //Hop over, if zero value in this bit
+    call pbBitshiftsum  # //If not zero, conduct peasant binary step
+    pbBitshifthop:      #
+    call pbCheckifend   #
+    jg pbLoop           # 
+    ret                 # return result;
+#########################################################################
+    
+#Procedure name: pbSetup
+#Arguments: %rsi: the number to be masked, %r13: bitmask, %r10: parent
+#  procedure loop counter, %r11: increment value, %r14: intermediate multipl.
+#  result
+#Return values: %r10: updated loop counter value, %r8: copy of loop counter val,
+#  %r14: reset intermediate result.
+#Procedure desc: During each call, the procedure applies the given bit mask
+#  on the number to be multplied, and checks, if its zero. If it is, the
+#  procedure "returns zero" resulting in a skip of a multiplication round in
+#  pbMultiply. It then increments the bit shift size used as a loop limit
+#  in the pbBitshiftsum procedure. The intermediate result is reset.
+#Register usage table:
+#  %rsi: number (number to be masked)
+#  %8: copy of pbMultiply of loop counter
+#  %r9:  numberCopy (copy of the number for maskin)
+#  %r10: i (pbMultiply loop counter)
+#  %r11: increment
+#  %r12: zero for checks
+#  %r13: bitMask
+#  %r14: intermediateResult (for adding up the result of this round)
+#Instruction count: 8 instructions in any case.
+
+pbSetup:
+    rrmovq %rsi, %r9    # int numberCopy = number;
+    andq %r13, %r9      # int truthValue = numberCopy & bitMask;
+    addq %r11, %r10     # i = i + 1;
+    irmovq $0, %r14     # intermediateResult = 0;
+    rrmovq %r10, %r8    # if (truthValue == 1){
+    irmovq $0, %r12     #   return 1;} else {
+    subq %r9, %r12      #   return 1;}
+    ret
+#########################################################################    
+
+#Procedure name: pbBitshiftsum
+#Arguments: %rdx: the "non-masked" value to be multiplied, %r14: the intermed.
+#  multiplication result, %r11: incrementer, %r8: copy of bitshifting count
+#  %rbx: the multiplication result
+#Return values: %rbx: updated multiplication result
+#Procedure desc: Multiplies the other operand with a single bit shifted x times.
+#  In practice, bit shifts the operand x times to the left, and adds it to the result.
+#Register usage table:
+#  %rbx: the result
+#  %rdx: The other multiplication operand
+#  %8: loop count
+#  %r11: increment
+#  %r14: intermediate result
+#Instruction count: The instruction amount is 5 for val == 1 and 2 + x * 3, where x is defined
+#  by the exponent of the current bit being processed. Now the max. bit
+#  value for max. Fibonacci candidate == 1000, so a maximum of 9 rounds is
+#  possible, giving 29 instructions.
+
+pbBitshiftsum:
+    addq %rdx, %r14     # intermediateResult =  intermediateResult + operandTwo;
+    pbBitshiftsumloop:  #while (loopCount != 0){ 
+    addq %r14, %r14     # intermediateResult = intermediateResult << 1;
+    subq %r11, %r8      # loopCount = loopCount - 1;
+                        # }
+    jne pbBitshiftsumloop#
+    addq %r14, %rbx     # result = result + intermediateResult;
+    ret                 #
+#########################################################################
+
+#Procedure name: pbCheckifend
+#Arguments: %r10: the amount of bitshifting multiplications conducted
+#Return values: integer, zero if finished, > 0 if not.
+#Procedure desc: The procedure checks if the desired amount of bitshifting
+#Multiplications have been done. The user also sets the desired amount
+#of shifts here.
+#Register usage table:
+#  %r10: i (pbMultiply loop counter (bitshifting multiplications conducted))
+#  %r12: 12 (max value for i, the desired count of bitshifting multiplication operations.
+#    The value is now set according to maximum Fibonacci candidate == 1000.
+#Instruction count: 3 x instructions in any case.
+
+pbCheckifend:
+    irmovq $11, %r12     #//Sets condition for: for(i = - 1; i < 13, i++)
+                         #//in the pbMultiply procedure
+    subq %r10, %r12      #
+    ret
+#########################################################################
+
+.pos 0x400               #Memory address for bitshifting values
+rsmemplace:
+
+.pos 0x600
+stack:
+
+.pos 0x700 #Fibonacci number array
+array:
+
+#Costs and potential for optimization:
+#    Instruction amounts were calculated for 1 and 1000 according to details given in each procedure description. For number 1 the cost is approximately 1249 instructions.
+#  For 1000 the corresponding amount is 1788. So bigger numbers cost more, but in the current state of the program, small numbers are not processed optimally,
+# which narrows the difference. The program can handle 56 bit numbers, but is currently set to process max. 20 bit numbers to optimize 1 - 1000 range calculations.
+#    The program has three main candidates for optimization: 1) taking the square root, 2) multiplying and 3) bitshifting to the right.
+#    Taking the square root has a cost dependent on the value. Value 1 will take 441 instructions, while value 1000 will take 635 instructions.
+#    The main issue with the multiplication is that it checks the other operand with bitmasks from 0x1 to 0x10000. If this number is low
+#  there will be many excessive checks. Having realized this, I checked how the values are placed in the registers for the multiplication by 5 for asserting
+#  perfect square. They turned out to be in the non-optimal order. Correcting this allowed lowering the amount of loops from 20 to 11, which significantly
+#  sped up the program. But on the other hand, if the Fibonacci candidate itself is a low number there will still be many excessive checks.
+#    Bitshifting to the right likely has optimization potential by changing the algorithm altogether for a more effective one. However, I couldn't find
+#  or devise one suited for Y86-64. For the chosen algorithm, there doesn't seem to be much room for optimization.  
+#    With this, the most obvious choice for optimization would be to reverse the list in the beginning so the largest number is the first to be processed. Then the
+#  "bit" value determination for sqrt should be calculated for the first time in the main procedure and stored into a global variable. Then each processing
+#  of a number would update this to cut down excessive loops. An analogous modification could be done for the multiplication as well.
